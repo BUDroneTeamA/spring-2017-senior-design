@@ -98,16 +98,24 @@ int16_t accZ_landing = referenceAccZ - 10;
 const uint8_t landingDecrement = 1;
 unsigned long landingStartTime;
 unsigned long landingCurrentTime;
-const uint8_t landingDelay = 70;                   // Delay between decrementing the throttle in ms
+const uint8_t landingDelay = 70;            // Delay between decrementing the throttle in ms
 boolean firstDelayCall = true;              // Is it the first time through the landing delay?
 boolean firstLandingCall = true;            // Is it the first time through the landing function?
 uint16_t landingThrottle;
 uint16_t landingThrottleValue = 1400;
 uint16_t landingMin = landingThrottleValue;
 unsigned long landingHoldStartTime;
-uint16_t landingHoldTime = 2500;            // ms to hold minimum landing throttle on landing
+uint16_t landingHoldTime = 1500;            // ms to hold minimum landing throttle on landing
 boolean landingHold = false;                // is the throttle being held for landing?
 
+// Flight Degradation
+boolean firstCallHitDeg = true;             // Is it the first time the hit degradation function has been called
+unsigned long timeStart;                    // time in ms that the function was called (used for delay)
+uint16_t spinDelay = 1000;                  // time in ms to spin
+uint16_t spinThrottle = 2000;                // amount to increase yaw throttle by for spinning
+uint16_t spinThrottleInc;                   
+uint16_t initYaw;                           // Stores the initial yaw value prior to spinning
+unsigned long currentTimeHitDeg;            // Current time through each function call
  /******************************** End Baylor Variables *****************************************/
 
 /*********** RC alias *****************/
@@ -1022,35 +1030,6 @@ void loop () {
 
 /******************************** Baylor Modified Main Loop ***********************************/
   // Handle Launch
-  
-  /*if (f.ARMED && isLaunch)
-  {
-    if (rcData[THROTTLE] < launchThrot)
-    {
-      rcData[THROTTLE] = startThrottle;
-
-      if (startThrottle <= 2000)
-      {
-        startThrottle += incThrottle;     
-      }
-    }
-    else
-    {
-      accReached = true;
-      AltHold = EstAlt + altAdd;
-    }
-    
-    if (accReached)
-    {
-      curThrot = rcData[THROTTLE];
-      startThrottle = defStartThrottle;
-      isLaunch = false;
-      accReached = false;
-      launchCalledHover = true;   
-    }       
-  }*/
-
-  // Handle Launch
   if (f.ARMED && isLaunch) {
 
     //Reach Desired Acceleration
@@ -1092,7 +1071,8 @@ void loop () {
   }
   
    //Code to sense IR shots
-  irSensorValue = analogRead(A5);
+  /*
+   * irSensorValue = analogRead(A5);
   
   if( irSensorValue < 100 && vulnerable){
     hits++;
@@ -1107,7 +1087,7 @@ void loop () {
   else{
     vulnerable = false;
   }
-
+  */
 
   
   // Code to turn on RBG Health indicator
@@ -1147,6 +1127,7 @@ void loop () {
           RGB_BLUE_ON;
           firstTimeBlink = 1;
           shouldBeBlinking = false;
+
           break;
       }
 
@@ -1801,12 +1782,34 @@ void TIMER_CONFIG_KHZ(int val){
 
 void turnOnIRLED(){
   fireCalled = true;
-  //hits++;
 }
 
 void firstHitDeg(){
-  conf.P8[ROLL]     = 71;  conf.I8[ROLL]    = 30; conf.D8[ROLL]     = 23;
+  /*conf.P8[ROLL]     = 71;  conf.I8[ROLL]    = 30; conf.D8[ROLL]     = 23;
   conf.P8[PITCH]    = 71;  conf.I8[PITCH]    = 30; conf.D8[PITCH]    = 23;
+  */
+  // If first time called per hit
+  if(firstCallHitDeg)
+  {
+    // Get current yaw
+    initYaw = rcData[YAW];
+    
+    // Set throttle value to be applied to yaw axis
+    spinThrottleInc = spinThrottle;
+
+    // Get initial time
+    timeStart = millis();
+
+    firstCallHitDeg = false;   
+  }
+  else if(millis() - timeStart > spinDelay)
+  {
+    // Set throttle value for yaw axis back to its initial value
+    spinThrottleInc = initYaw;
+  }
+
+  // Set yaw throttle
+  rcData[YAW] = spinThrottleInc;
 }
 
 void secondHitDeg(){
@@ -1872,6 +1875,9 @@ void funcToLand(){
         hasLanded = 1;
         landingTime = millis();
         landingMin = landingThrottleValue;
+
+        // Reset hit deg variables
+        firstCallHitDeg = true;
       
      
       }     
